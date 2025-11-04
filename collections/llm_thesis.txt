@@ -1,0 +1,11 @@
+Automated Design of Agentic Systems
+AutoGen: Enabling Next-Gen LLM Applications via Multi-Agent Conversation
+Hypothesis Generation with Large Language Models
+Can LLMs Generate Novel Research Ideas? A Large-Scale Human Study with 100+ NLP Researchers
+Survey on Evaluation of LLM-based Agents
+Evaluation and Benchmarking of LLM Agents: A Survey
+A survey on large language model based autonomous agents
+AgentBench: Evaluating LLMs as Agents
+Deep Research: A Survey of Autonomous Research Agents
+Agent Laboratory: Using LLM Agents as Research Assistants
+The AI Scientist: Towards Fully Automated Open-Ended Scientific Discovery

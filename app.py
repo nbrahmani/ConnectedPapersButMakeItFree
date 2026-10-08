@@ -1,4 +1,4 @@
-import time, requests
+import re, time, unicodedata, requests, bibtexparser
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
@@ -41,12 +41,84 @@ def build(titles):
         deg[u] = deg.get(u, 0) + 1; deg[v] = deg.get(v, 0) + 1
     return edges, kind, deg, failed, venue
 
+# ---------- reference checker ----------
+REQUIRED = {"article": ["author", "title", "journal", "year"], "inproceedings": ["author", "title", "booktitle", "year"],
+            "incollection": ["author", "title", "booktitle", "publisher", "year"], "book": ["title", "publisher", "year"],
+            "phdthesis": ["author", "title", "school", "year"], "mastersthesis": ["author", "title", "school", "year"],
+            "techreport": ["author", "title", "institution", "year"], "misc": ["title"]}
+
+def norm(s):  # ö -> o, drop case, spaces, punctuation
+    return re.sub(r"[^a-z0-9]", "", unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode().lower())
+
+def last_names(authors):
+    names = [n.strip() for n in re.sub(r"[{}]", "", authors).split(" and ")]
+    return [n.split(",")[0] if "," in n else n.split()[-1] for n in names if n and n.lower() != "others"]
+
+def style_issues(e):
+    t, title = e["ENTRYTYPE"].lower(), e.get("title", "")
+    out = [f"missing {k}" for k in REQUIRED.get(t, ["title", "year"]) if not e.get(k, "").strip()]
+    if t == "book" and not (e.get("author") or e.get("editor")): out.append("missing author/editor")
+    if e.get("year") and not re.fullmatch(r"\d{4}", e["year"].strip()): out.append(f"bad year '{e['year']}'")
+    if re.search(r"\d\s*[-–—]\s*\d", e.get("pages", "")) and "--" not in e["pages"]: out.append("pages should use '--'")
+    if "et al" in e.get("author", "").lower(): out.append("use 'and others', not 'et al'")
+    if title.count("{") != title.count("}"): out.append("unbalanced braces in title")
+    if e.get("doi", "").startswith("http"): out.append("doi should not be a URL")
+    return out
+
+@st.cache_data(show_spinner=False)
+def lookup(title):
+    time.sleep(1)
+    r = get(API + "search/match", params={"query": title, "fields": "title,year,authors,publicationTypes"})
+    return (r.get("data") or [None])[0]
+
+def refs_page():
+    st.title("Reference checker")
+    up = st.file_uploader("Upload .bib file", type="bib")
+    if not up: st.info("Upload a .bib file to check it."); return
+    entries = bibtexparser.loads(up.getvalue().decode()).entries
+    rows, seen, bar = [], {}, st.progress(0.0)
+    for i, e in enumerate(entries):
+        bar.progress((i + 1) / len(entries), f"Checking {i + 1}/{len(entries)}")
+        title, issues, found, status = re.sub(r"[{}\\]", "", e.get("title", "")).strip(), style_issues(e), "", ""
+        if norm(title) in seen: issues.append(f"duplicate of {seen[norm(title)]}")
+        seen.setdefault(norm(title), e["ID"])
+        if not title: status = "❌ No title"
+        else:
+            try: m = lookup(title)
+            except Exception: m, status = None, "⚠️ Lookup failed"
+            if not m: status = status or "❌ Not found"
+            else:
+                found, a, b = m["title"], norm(title), norm(m["title"])
+                if a != b and a not in b and b not in a: status = "❌ Title mismatch"
+                ss = norm(" ".join(x["name"] for x in m.get("authors") or []))
+                miss = [l for l in last_names(e.get("author", "")) if norm(l) not in ss]
+                if miss: issues.append("authors not found: " + ", ".join(miss))
+                if m.get("year") and e.get("year") and e["year"].strip() != str(m["year"]): issues.append(f"year {e.get('year')} vs {m['year']}")
+                types, t = m.get("publicationTypes") or [], e["ENTRYTYPE"].lower()
+                if "Conference" in types and t != "inproceedings": issues.append("looks like @inproceedings")
+                elif "JournalArticle" in types and t not in ("article", "misc"): issues.append("looks like @article")
+        rows.append({"Status": status or ("⚠️ Issues" if issues else "✅ OK"), "Key": e["ID"], "Type": e["ENTRYTYPE"],
+                     "Your title": title, "Found title": found, "Issues": "; ".join(issues)})
+    bar.empty()
+    df = pd.DataFrame(rows)
+    st.caption(" · ".join(f"{k}: {v}" for k, v in df.Status.value_counts().items()))
+    if st.toggle("Only problems", True): df = df[df.Status != "✅ OK"]
+    st.dataframe(df, hide_index=True, use_container_width=True, height=600)
+    safe = df.replace(r"^([=+\-@])", r"'\1", regex=True)  # stop Excel running text as formulas
+    st.download_button("Download CSV", safe.to_csv(index=False), "ref_check.csv")
+
 st.set_page_config(layout="wide", page_title="Connected Papers But Free", page_icon="🕸️")
 st.markdown("""<style>
 .block-container {padding-top: 2rem;}
+html, body, h1, h2, h3, p, label, li, input, textarea, button, .chip {font-family: Calibri, sans-serif !important;}
 .chip {display:inline-block; padding:3px 12px; margin:0 6px 6px 0; border-radius:999px;
        font-size:0.85rem; color:white; font-weight:500;}
 </style>""", unsafe_allow_html=True)
+
+if "refs" not in st.session_state: st.session_state.refs = False
+def flip(): st.session_state.refs = not st.session_state.refs
+st.button("🕸️ Back to main panel" if st.session_state.refs else "📚 Check references", on_click=flip)
+if st.session_state.refs: refs_page(); st.stop()
 
 st.sidebar.title("🕸️ Connected Papers But Free")
 up = st.sidebar.file_uploader("Titles file (.txt)", type="txt")
@@ -95,7 +167,7 @@ with left:
     net = Network(height="760px", width="100%", directed=True, cdn_resources="in_line", bgcolor=NAVY, font_color=CREAM)
     net.set_options("""{"layout": {"randomSeed": 1},
       "physics": {"solver": "forceAtlas2Based"},
-      "nodes": {"shape": "dot", "font": {"size": 14, "face": "sans-serif", "color": "#FBE9D0"}, "borderWidth": 0},
+      "nodes": {"shape": "dot", "font": {"size": 14, "face": "Calibri, sans-serif", "color": "#FBE9D0"}, "borderWidth": 0},
       "edges": {"smooth": {"type": "continuous"}, "arrows": {"to": {"scaleFactor": 0.4}}},
       "interaction": {"hover": true, "tooltipDelay": 100}}""")  # same layout every time
     for n in sorted(keep):

@@ -41,20 +41,20 @@ def build(titles):
         deg[u] = deg.get(u, 0) + 1; deg[v] = deg.get(v, 0) + 1
     return edges, kind, deg, failed, venue
 
-st.set_page_config(layout="wide", page_title="Paper graph", page_icon="🕸️")
+st.set_page_config(layout="wide", page_title="Connected Papers But Free", page_icon="🕸️")
 st.markdown("""<style>
 .block-container {padding-top: 2rem;}
 .chip {display:inline-block; padding:3px 12px; margin:0 6px 6px 0; border-radius:999px;
        font-size:0.85rem; color:white; font-weight:500;}
 </style>""", unsafe_allow_html=True)
 
-st.sidebar.title("🕸️ Paper graph")
+st.sidebar.title("🕸️ Connected Papers But Free")
 up = st.sidebar.file_uploader("Titles file (.txt)", type="txt")
 text = st.sidebar.text_area("Or paste titles (one per line)", up.getvalue().decode() if up else "", height=200)
 min_deg = st.sidebar.slider("Min degree", 1, 10, 1)
 titles = [t.strip() for t in text.splitlines() if t.strip()]
 if not titles:
-    st.title("Paper graph"); st.info("👈 Add titles in the sidebar."); st.stop()
+    st.title("Connected Papers But Free"); st.info("👈 Add titles in the sidebar."); st.stop()
 
 with st.spinner("Fetching papers…"):
     edges, kind, deg, failed, venue = build(tuple(titles))
@@ -68,7 +68,7 @@ color = {"seed": SEED, "citation": CIT, "reference": REF, "both": BOTH}
 label = {"seed": "Yours", "citation": "Cites yours", "reference": "Cited by yours", "both": "Both"}
 rev = {v: k for k, v in label.items()}
 
-st.title("Paper graph")
+st.title("Connected Papers But Free")
 st.markdown("".join(f"<span class='chip' style='background:{color[k]};color:{NAVY if k in ('citation', 'reference') else CREAM}'>{label[k]}</span>" for k in color), unsafe_allow_html=True)
 left, right = st.columns([3, 2], gap="large")
 

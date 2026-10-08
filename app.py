@@ -10,7 +10,7 @@ SEED, CIT, REF, BOTH = RED, SAGE, CREAM, BROWN
 
 def get(url, **kw):
     for i in range(5):
-        r = requests.get(url, **kw)
+        r = requests.get(url, timeout=30, **kw)
         if r.status_code != 429: return r.json()
         time.sleep(2 ** i * 2)  # rate limited: wait 2, 4, 8, 16, 32s
     r.raise_for_status()
@@ -41,20 +41,20 @@ def build(titles):
         deg[u] = deg.get(u, 0) + 1; deg[v] = deg.get(v, 0) + 1
     return edges, kind, deg, failed, venue
 
-st.set_page_config(layout="wide", page_title="Connected Papers But Make It Free", page_icon="🕸️")
+st.set_page_config(layout="wide", page_title="Paper graph", page_icon="🕸️")
 st.markdown("""<style>
 .block-container {padding-top: 2rem;}
 .chip {display:inline-block; padding:3px 12px; margin:0 6px 6px 0; border-radius:999px;
        font-size:0.85rem; color:white; font-weight:500;}
 </style>""", unsafe_allow_html=True)
 
-st.sidebar.title("🕸️ Connected Papers But Make It Free")
+st.sidebar.title("🕸️ Paper graph")
 up = st.sidebar.file_uploader("Titles file (.txt)", type="txt")
 text = st.sidebar.text_area("Or paste titles (one per line)", up.getvalue().decode() if up else "", height=200)
 min_deg = st.sidebar.slider("Min degree", 1, 10, 1)
 titles = [t.strip() for t in text.splitlines() if t.strip()]
 if not titles:
-    st.title("Connected Papers But Make It Free"); st.info("👈 Add titles in the sidebar."); st.stop()
+    st.title("Paper graph"); st.info("👈 Add titles in the sidebar."); st.stop()
 
 with st.spinner("Fetching papers…"):
     edges, kind, deg, failed, venue = build(tuple(titles))
@@ -68,7 +68,7 @@ color = {"seed": SEED, "citation": CIT, "reference": REF, "both": BOTH}
 label = {"seed": "Yours", "citation": "Cites yours", "reference": "Cited by yours", "both": "Both"}
 rev = {v: k for k, v in label.items()}
 
-st.title("Connected Papers But Make It Free")
+st.title("Paper graph")
 st.markdown("".join(f"<span class='chip' style='background:{color[k]};color:{NAVY if k in ('citation', 'reference') else CREAM}'>{label[k]}</span>" for k in color), unsafe_allow_html=True)
 left, right = st.columns([3, 2], gap="large")
 
@@ -100,7 +100,7 @@ with left:
       "interaction": {"hover": true, "tooltipDelay": 100}}""")  # same layout every time
     for n in sorted(keep):
         hi = n == sel
-        net.add_node(n, label=n[:60] if kind[n] == "seed" or hi else " ", title=f"{n}\n{venue.get(n) or ''}",
+        net.add_node(n, label=n[:60] if kind[n] == "seed" or hi else " ", title=f"{n}\n{venue.get(n) or ''}".replace("<", "").replace(">", ""),  # no HTML in tooltips
                      color={"background": NAVY, "border": RED} if hi else color[kind[n]], borderWidth=6 if hi else 0,
                      size=(25 if hi else 8) + 4 * deg[n] ** 0.5)
     for u, v_, c in edges:

@@ -5,5 +5,6 @@ Built using Semantic Scholar API
 Still under development
 
 Usage:
-
-* python -m streamlit run app.py
+* Set up streamlit and ensure it can be run properly
+* Install the required python packages 
+* Run "python -m streamlit run app.py"
